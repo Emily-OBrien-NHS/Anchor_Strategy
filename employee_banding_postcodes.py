@@ -33,7 +33,7 @@ AND PostCode IS NOT NULL
 """
 Band_pcds = pd.read_sql(Band_pcds_query, cl3_engine).rename(columns={'PostCode':'pcds', 'StaffGroup':'Staff Group'})
 #IMD DATA
-imd_query = """SELECT PostcodeVariable as pcds, IndexValue
+imd_query = """SELECT PostcodeVariable as pcds, IndexValue as IMD
 FROM [SDMartDataLive2].[PiMSMarts].[Reference].[vw_IndicesOfMultipleDeprivation2019_DecileByPostcode]
 """
 imd = pd.read_sql(imd_query, cl3_engine)
@@ -105,7 +105,7 @@ def parse_date(td):
     resYear = (resYear).astype(int).astype(str)
     return resYear + "Y " + resMonth + "m"
 
-def group_data(df, pen, cols):
+def group_data(df, pen, pen_df, cols):
      #Function to group up data by different values and produce the results.
      df = df.groupby(cols).agg({'Banding':'count', 'FTE':'sum', 'Days in Position':['mean', 'max']}).reset_index()
      df.columns = cols + ['Headcount', 'FTE', 'Average Time in Position', 'Max Time in Position']
@@ -114,7 +114,8 @@ def group_data(df, pen, cols):
      #Add pension data
      df['Proportion of Total Headcount'] = (df['Headcount'] / total_headcount)
      df['Proportion of Total FTE'] = (df['FTE'] / total_fte)
-     df = df.merge(pen.groupby(cols, as_index=False)['Pension Opt Out'].count(), on=cols, how='left')
+     if pen:
+          df = df.merge(pen_df.groupby(cols, as_index=False)['Pension Opt Out'].count(), on=cols, how='left')
      return df
 
 def all_data(df, pen):
@@ -131,34 +132,57 @@ def all_data(df, pen):
      all['Banding'] = 'All'
      return all
 
-
 #Select/add required columns
-df = Band_pcds[['Banding', 'Band No', 'Band Groups', 'Staff Group', 'FTE', 'AgeBand', 'StartDateInPosition']].copy()
+df = Band_pcds[['Banding', 'Band No', 'Band Groups', 'Staff Group', 'FTE', 'AgeBand', 'StartDateInPosition', 'IMD']].copy()
 df['Days in Position'] = (pd.Timestamp.now() - pd.to_datetime(df['StartDateInPosition']))
 
-#Get the grouped tables required
-band_name = group_data(df, pension, ['Banding'])
-staff_group = group_data(df, pension, ['Staff Group'])
-band_and_staff = group_data(df, pension, ['Banding', 'Staff Group'])
-all = all_data(df, pension)
+######Band and staff group#####
+band_name = group_data(df, True, pension, ['Banding'])
 band_name['Staff Group'] = 'All'
+staff_group = group_data(df, True, pension, ['Staff Group'])
 staff_group['Banding'] = 'All'
+band_and_staff = group_data(df, True, pension, ['Banding', 'Staff Group'])
+all = all_data(df, pension)
 agg_data = pd.concat([band_and_staff, band_name, staff_group, all])
 lookup_col = agg_data[['Banding', 'Staff Group']].astype(str).agg(' '.join, axis=1)
 agg_data.insert(loc=0, column='lookup', value=lookup_col)
 
-band_age_band = group_data(df, pension, ['Banding', 'AgeBand'])
-staff_age_band = group_data(df, pension, ['Staff Group', 'AgeBand'])
+#####Age band level#####
+band_age_band = group_data(df, True, pension, ['Banding', 'AgeBand'])
 band_age_band['Staff Group'] = 'All'
+staff_age_band = group_data(df, True, pension, ['Staff Group', 'AgeBand'])
 staff_age_band['Banding'] = 'All'
-band_and_staff_age_band = group_data(df, pension, ['Banding', 'Staff Group', 'AgeBand'])
-all_age_band = group_data(df, pension, ['AgeBand'])
+band_and_staff_age_band = group_data(df, True, pension, ['Banding', 'Staff Group', 'AgeBand'])
+all_age_band = group_data(df, True, pension, ['AgeBand'])
 all_age_band['Staff Group'] = 'All'
 all_age_band['Banding'] = 'All'
 agg_age_data = pd.concat([band_and_staff_age_band, band_age_band, staff_age_band, all_age_band])
 lookup_col = agg_age_data[['Banding', 'Staff Group', 'AgeBand']].astype(str).agg(' '.join, axis=1)
 agg_age_data.insert(loc=0, column='lookup', value=lookup_col)
 
+#####IMD data#####
+band_and_staff_IMD = (group_data(df, False, pension, ['Banding', 'Staff Group', 'IMD'])
+                      [['Banding', 'Staff Group', 'IMD', 'Headcount']])
+band_IMD = (group_data(df, False, pension, ['Banding', 'IMD'])
+                      [['Banding', 'IMD', 'Headcount']])
+band_IMD['Staff Group'] = 'All'
+staff_IMD = (group_data(df, False, pension, ['Staff Group', 'IMD'])
+                      [['Staff Group', 'IMD', 'Headcount']])
+staff_IMD['Banding'] = 'All'
+all_IMD = (df.groupby('IMD', as_index=False)['Banding'].count()
+           .rename(columns={'Banding':'Headcount'}))
+all_IMD['Staff Group'] = 'All'
+all_IMD['Banding'] = 'All'
+IMD_data = pd.concat([band_and_staff_IMD, band_IMD, staff_IMD, all_IMD])
+#create pivot table to export too
+pivot_IMD = (band_IMD.pivot(columns='Banding', index='IMD', values='Headcount')
+             .reset_index())
+pivot_IMD['IMD'] = pivot_IMD['IMD'].astype(int)
+pivot_IMD = pivot_IMD.sort_values(by='IMD').set_index('IMD')
+pivot_IMD['Total'] = pivot_IMD.sum(axis=1)
+pivot_IMD['Percentage'] = pivot_IMD['Total'] / pivot_IMD['Total'].sum()
+lookup_col = IMD_data[['Banding', 'Staff Group', 'IMD']].astype(str).agg(' '.join, axis=1)
+IMD_data.insert(loc=0, column='lookup', value=lookup_col)
 
 ##############To excel ##################
 print('creating excel output')
@@ -204,7 +228,7 @@ worksheet.data_validation('B2', {'validate':'list',
 
 #Add in text for band level lookups
 for i, age in enumerate(ages):
-     worksheet.write(f'A{i+13}', age, bold_right)
+     worksheet.write(f'A{i+14}', age, bold_right)
 #Add band level vlookups
 worksheet.write_formula('B4', '''=IFERROR(VLOOKUP(B2&" "&B1,'Agg Data'!A:J,4,0), 0)''', center_border)
 worksheet.write_formula('B5', '''=IFERROR(VLOOKUP(B2&" "&B1,'Agg Data'!A:J,5,0), 0)''', center_border)
@@ -214,12 +238,22 @@ worksheet.write_formula('B8', '''=IFERROR(VLOOKUP(B2&" "&B1,'Agg Data'!A:J,8,0),
 worksheet.write_formula('B9', '''=IFERROR(VLOOKUP(B2&" "&B1,'Agg Data'!A:J,9,0), "-")''', percent_format)
 worksheet.write_formula('B10', '''=IFERROR(VLOOKUP(B2&" "&B1,'Agg Data'!A:J,10,0), "-")''', center_border)
 
+#Add text for IMD lookups
+worksheet.write('D1', 'IMD:', bold_wrap)
+worksheet.write('E1', 'Count:', bold_wrap)
+worksheet.write('F1', '%:', bold_wrap)
+for i in range(1, 11):
+     worksheet.write(f'D{i+1}', i, bold_right)
+     worksheet.write_formula(f'E{i+1}', f'''=IFERROR(VLOOKUP(B2 &" "&B1&" {i}",'IMD Lookup'!A:e,5,0), "-")''', center_border)
+     worksheet.write_formula(f'F{i+1}', f'''=IFERROR(E{i+1}/B4, "-")''', percent_format)
+
+
 #Add text for age band level lookups
 for i, col in enumerate(zip(cols, col_names)):
      worksheet.write(f'A{i+4}', col[1], bold_right)
-     worksheet.write(f'{col[0]}12', col[1], bold_wrap)
+     worksheet.write(f'{col[0]}13', col[1], bold_wrap)
 #Add age band lookups
-for i in range(13,25):
+for i in range(14,26):
      #Headcount
      worksheet.write_formula(f'B{i}',f'''=IFERROR(VLOOKUP((B2&" "&B1&" "&A{i}),'Agg Age Band Data'!A:K,5,0), 0)''', center_border)
      #FTE
@@ -236,6 +270,17 @@ for i in range(13,25):
      worksheet.write_formula(f'H{i}', f'''=IFERROR(VLOOKUP((B2&" "&B1&" "&A{i}),'Agg Age Band Data'!A:K,11,0), "-")''', center_border)
 
 #Add in bar charts
+#IMD
+IMD_chart = workbook.add_chart({'type':'column'})
+IMD_chart.add_series({'name':'Headcount',
+                            'categories': 'Filter!$D$2:$D$11',
+                            'values': 'Filter!$E$2:$E$11'})
+IMD_chart.set_title({'name':'Headcount by IMD'})
+IMD_chart.set_x_axis({'name':'IMD'})
+IMD_chart.set_style(2)
+IMD_chart.set_legend({'none':True})
+worksheet.insert_chart('J2', IMD_chart, {'x_scale':1.04, 'y_scale':1.07})
+#Headcount and FTE
 headcount_chart = workbook.add_chart({'type':'column'})
 headcount_chart.add_series({'name':'Headcount',
                             'categories': 'Filter!$A$13:$A$24',
@@ -246,8 +291,8 @@ headcount_chart.add_series({'name':'FTE',
 headcount_chart.set_title({'name':'Headcount and FTE'})
 headcount_chart.set_x_axis({'name':'Age Bands', 'num_font':{'rotation':45}})
 headcount_chart.set_style(2)
-worksheet.insert_chart('J2', headcount_chart, {'x_scale':1.04, 'y_scale':1.07})
-
+worksheet.insert_chart('J17', headcount_chart, {'x_scale':1.04, 'y_scale':1.07})
+#Pension Opt Out
 pension_chart = workbook.add_chart({'type':'column'})
 pension_chart.add_series({'name':'Pension Opt Out',
                             'categories': 'Filter!$A$13:$A$24',
@@ -256,7 +301,7 @@ pension_chart.set_title({'name':'Pension Opt Out'})
 pension_chart.set_x_axis({'name':'Age Bands', 'num_font':{'rotation':45}})
 pension_chart.set_style(2)
 pension_chart.set_legend({'none':True})
-worksheet.insert_chart('J17', pension_chart, {'x_scale':1.04, 'y_scale':1.07})
+worksheet.insert_chart('J32', pension_chart, {'x_scale':1.04, 'y_scale':1.07})
 
 ####Add lookup sheets####
 agg_data.to_excel(writer, sheet_name='Agg Data', index=False, engine='xlsxwriter')
@@ -270,6 +315,16 @@ age_worksheet = writer.sheets['Agg Age Band Data']
 age_worksheet.set_column(0, 3, 26)
 age_worksheet.set_column(4, 12, 11, center)
 age_worksheet.set_column(9, 10, 16, percent_format2)
+
+IMD_data.to_excel(writer, sheet_name='IMD Lookup', index=False, engine='xlsxwriter')
+IMD_worksheet = writer.sheets['IMD Lookup']
+IMD_worksheet.set_column(0, 1, 26)
+IMD_worksheet.set_column(2, 3, 11, center)
+
+pivot_IMD.to_excel(writer, sheet_name='IMD Pivot', engine='xlsxwriter')
+pivot_IMD_worksheet = writer.sheets['IMD Pivot']
+pivot_IMD_worksheet.set_column(0, 14, 11, center)
+pivot_IMD_worksheet.set_column(15, 15, 11, percent_format2)
 
 ####save and close the workbook####
 writer.close()
