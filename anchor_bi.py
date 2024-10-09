@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import re
 from sqlalchemy import create_engine
 
 def anchor_strategy():
@@ -7,7 +8,7 @@ def anchor_strategy():
     #read in postcode to latlong data and pension data
     pcode_LL = pd.read_csv("G:/PerfInfo/Performance Management/PIT Adhocs/2021-2022/Hannah/Maps/pcode_LSOA_latlong.csv",
                                 usecols = ['pcds', 'lat', 'long'])
-    pension = pd.read_excel('C:/Users/obriene/Projects/Anchor Strategy/Pension Opt Out/Pension Opt Out Summary 16-09-2024.xlsx',
+    pension = pd.read_excel('G:/PerfInfo/Performance Management/OR Team/BI Reports/Anchor Strategy/Pension Opt Out/Pension Opt Out Summary.xlsx',
                             usecols=['Banding', 'Staff Group', 'Age Band', 'FTE', 'Pension Opt Out']).rename(columns={'Band ':'Banding', 'Age Band':'AgeBand'})
     #Read in employee data and imd from cl3-data
     cl3_engine = create_engine('mssql+pyodbc://@cl3-data/DataWarehouse?'\
@@ -58,8 +59,13 @@ def anchor_strategy():
                            'lat', 'long']].copy()
     #Dataframes of unique values for BI relationships
     banding = pd.DataFrame(Band_pcds['Banding'].drop_duplicates().reset_index(drop=True))
+    banding = banding.sort_values(by='Banding')
+    banding['order'] = [i for i in range(1, len(banding)+1)]
     staff_groups = pd.DataFrame(Band_pcds['Staff Group'].drop_duplicates().reset_index(drop=True))
     age_bands = pd.DataFrame(Band_pcds['AgeBand'].drop_duplicates().reset_index(drop=True))
+    age_bands['order'] = [int(re.search(r'\d+', age).group()) for age in age_bands['AgeBand']]
+    age_bands = age_bands.sort_values(by='order')
+    age_bands['order'] = [i for i in range(1, len(age_bands)+1)]
     
     return employees, pension, banding, staff_groups, age_bands
 
