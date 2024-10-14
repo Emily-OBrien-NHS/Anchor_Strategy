@@ -68,5 +68,3 @@ def anchor_strategy():
     age_bands['order'] = [i for i in range(1, len(age_bands)+1)]
     
     return employees, pension, banding, staff_groups, age_bands
-
-employees, pension, banding, staff_groups, age_bands = anchor_strategy()
