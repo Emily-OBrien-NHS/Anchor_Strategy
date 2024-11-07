@@ -21,3 +21,6 @@ outputs/
 
 #pyc files
 *.pyc
+
+#word files
+.docx

@@ -8,9 +8,9 @@ from pathlib import Path
 from sqlalchemy import create_engine
 from folium.plugins import HeatMap
 from datetime import datetime
-os.chdir('C:/Users/obriene/Projects/Anchor Strategy/Outputs')
+
 run_date = datetime.today().strftime('%Y-%m-%d')
-pension_data_filename = 'Pension Opt Out Summary 02-10-2024.xlsx'
+pension_data_filename = 'Pension Opt Out Summary.xlsx'
 
 #Only map/export data for plymouth postcodes
 plymouth_only = False
@@ -94,7 +94,7 @@ for group in LL_df['Band Groups'].drop_duplicates().tolist():
 # #Table Data
 # =============================================================================
 #read in pension data
-pension = pd.read_excel(f'C:/Users/obriene/Projects/Anchor Strategy/Pension Opt Out/{pension_data_filename}')
+pension = pd.read_excel(f'G:/PerfInfo/Performance Management/OR Team/BI Reports/Anchor Strategy/Pension Opt Out/{pension_data_filename}')
 pension = pension.rename(columns={'Band ':'Banding', 'Age Band':'AgeBand'})
 
 #Functions
