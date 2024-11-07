@@ -23,4 +23,4 @@ outputs/
 *.pyc
 
 #word files
-.docx
+*.docx
