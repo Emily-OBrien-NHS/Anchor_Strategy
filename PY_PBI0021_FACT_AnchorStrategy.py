@@ -9,7 +9,7 @@ def anchor_strategy():
     pcode_LL = pd.read_csv("G:/PerfInfo/Performance Management/PIT Adhocs/2021-2022/Hannah/Maps/pcode_LSOA_latlong.csv",
                                 usecols = ['pcds', 'lat', 'long'])
     pension = pd.read_excel('G:/PerfInfo/Performance Management/OR Team/BI Reports/Anchor Strategy/Pension Opt Out/Pension Opt Out Summary.xlsx',
-                            usecols=['Banding', 'Staff Group', 'Age Band', 'FTE', 'Pension Opt Out']).rename(columns={'Band ':'Banding', 'Age Band':'AgeBand'})
+                            usecols=['Banding', 'Staff Group', 'Age Band', 'Gender', 'FTE', 'Pension Opt Out']).rename(columns={'Band ':'Banding', 'Age Band':'AgeBand'})
     pcode_stem_area = pd.read_excel('G:/PerfInfo/Performance Management/OR Team/BI Reports/Anchor Strategy/Postcode stem to area.xlsx')
     pcode_stem_area['Town'] = pcode_stem_area['Town'].str.title()
     #Read in employee data and imd from cl3-data
@@ -78,7 +78,7 @@ def anchor_strategy():
     #Select the columns for the employees table.
     employees = Band_pcds[['Banding', 'Band No', 'Band Groups', 'Staff Group',
                            'PositionTitle', 'AreaofWork',
-                           'IMD', 'AgeBand', 'FTE',  'Days in Position',
+                           'IMD', 'AgeBand', 'FTE', 'Gender', 'Days in Position',
                            'lat', 'long', 'stem', 'Town', 'Area', 'LL Area',
                            'Headcount groupings']].copy()
 
