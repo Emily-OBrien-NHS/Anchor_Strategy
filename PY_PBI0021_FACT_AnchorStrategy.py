@@ -16,6 +16,9 @@ def anchor_strategy():
     cl3_engine = create_engine('mssql+pyodbc://@cl3-data/DataWarehouse?'\
                             'trusted_connection=yes&driver=ODBC+Driver+17'\
                                 '+for+SQL+Server')
+    sdmart_engine = create_engine('mssql+pyodbc://@SDMartDataLive2/InfoDB?'\
+                                  'trusted_connection=yes&driver=ODBC+Driver+17'\
+                                  '+for+SQL+Server')
     #STAFF DATA
     Band_pcds_query = """SELECT *
     FROM [DataWarehouse].[HumanResources].[vw_CurrentStaffPostcodes]
@@ -25,10 +28,11 @@ def anchor_strategy():
     Band_pcds = pd.read_sql(Band_pcds_query, cl3_engine).rename(columns={'PostCode':'pcds', 'StaffGroup':'Staff Group'})
     #IMD DATA
     imd_query = """SELECT PostcodeVariable as pcds, IndexValue as IMD
-    FROM [SDMartDataLive2].[PiMSMarts].[Reference].[vw_IndicesOfMultipleDeprivation2019_DecileByPostcode]
+    FROM [PiMSMarts].[Reference].[vw_IndicesOfMultipleDeprivation2019_DecileByPostcode]
     """
-    imd = pd.read_sql(imd_query, cl3_engine)
+    imd = pd.read_sql(imd_query, sdmart_engine)
     cl3_engine.dispose()
+    sdmart_engine.dispose()
 
     ############## Tidy Data ##################
     #Group up bands
@@ -38,7 +42,7 @@ def anchor_strategy():
             Band_pcds['Banding'].isin(['Band 8A', 'Band 8B', 'Band 8C', 'Band 8D', 'Band 9']),
             Band_pcds['Banding'].isin(['Medical'])]
     groups = ['Bands 1-3', 'Bands 4-5', 'Bands 6-7', 'Bands 8+', 'Medical']
-    Band_pcds['Band Groups'] = np.select(conds, groups)
+    Band_pcds['Band Groups'] = np.select(conds, groups, default='')
     #Add in band number and days in position
     Band_pcds['Band No'] = Band_pcds['Banding'].str.extract(r'(\d+)').astype(float)
     Band_pcds['Days in Position'] = (pd.Timestamp.now()
